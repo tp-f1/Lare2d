@@ -70,22 +70,22 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 100
-    ny_global = 100
+    nx_global = 500
+    ny_global = 500
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
-    nsteps = 1
+    nsteps = -1 
 
     ! The maximum runtime of the code
-    t_end = 5.0_num
+    t_end = 11.0_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
     visc1 = 0.1_num
     visc2 = 0.0_num
     ! \nabla^2 v damping 
     ! visc3 is an array set initial conditions
-    use_viscous_damping = .TRUE.
+    use_viscous_damping = .FALSE.
 
     ! Set these constants to manually override the domain decomposition.
     ! If either constant is set to zero then the code will try to automatically
@@ -94,14 +94,14 @@ CONTAINS
     nprocy = 0
 
     ! The length of the domain in the x direction
-    x_min = -1.0_num
-    x_max = 1.0_num
+    x_min = -40.0_num
+    x_max = 40.0_num
     ! Should the x grid be stretched or uniform
     x_stretch = .FALSE.
 
     ! The length of the domain in the y direction
-    y_min = -1.0_num
-    y_max = 1.0_num
+    y_min = -40.0_num
+    y_max = 40.0_num
     ! Should the y grid be stretched or uniform
     y_stretch = .FALSE.
 
@@ -166,13 +166,13 @@ CONTAINS
     ! BC_PERIODIC - Periodic boundary conditions
     ! BC_OPEN     - Riemann far-field characteristic boundary conditions
     ! BC_USER     - User boundary conditions specified in boundary.f90
-    xbc_min = BC_USER
-    xbc_max = BC_USER
-    ybc_min = BC_USER
-    ybc_max = BC_USER
+    xbc_min = BC_PERIODIC 
+    xbc_max = BC_PERIODIC
+    ybc_min = BC_PERIODIC 
+    ybc_max = BC_PERIODIC
 
     !If any user boundaries are driven set this flag
-    driven_boundary = .TRUE.
+    driven_boundary = .FALSE.
 
     ! Control Boris scheme for limiting the Alfven speed
     ! Logical boris to turn on/off
@@ -217,10 +217,10 @@ CONTAINS
     data_dir = 'Data'
 
     ! The interval between output snapshots.
-    dt_snapshots = t_end / 50.0_num
+    dt_snapshots = t_end / 11.0_num
 
-    ! Force dt to adjust to output exactly at times set by dt_snapshot
-    force_exact_time_outputs = .FALSE.
+    ! Force dt to adjust to output exactly at times set by dt_snapshots
+    force_exact_time_outputs = .TRUE.
 
     ! dump_mask is an array which specifies which quantities the code should
     ! output to disk in a data dump.

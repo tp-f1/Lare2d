@@ -51,71 +51,53 @@ CONTAINS
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: temperature
     REAL(num) :: xi_v, amp, centre, width
 
+    integer :: n1
+    integer :: n2
+
+
     ! Below are all the variables which must be defined and their sizes
 
     vx(-2:nx+2, -2:ny+2) = 0.0_num
     vy(-2:nx+2, -2:ny+2) = 0.0_num
     vz(-2:nx+2, -2:ny+2) = 0.0_num
 
-    bx(-2:nx+2, -1:ny+2) = 0.0_num
+    bx(-2:nx+2, -1:ny+2) = 3.0_num
     by(-1:nx+2, -2:ny+2) = 0.0_num
     bz(-1:nx+2, -1:ny+2) = 0.0_num
 
     rho(-1:nx+2, -1:ny+2) = 1.0_num
-    energy(-1:nx+2, -1:ny+2) = 0.1_num
+    rho(-1:nx+2, (ny/2-5):(ny/2+5)) = 5.0_num
+    energy(-1:nx+2, -1:ny+2) = 1.0_num
 
     grav(-1:ny+2) = 0.0_num
+    
 
-    ! If defining the initial conditions using temperature then use
-    ALLOCATE(temperature(-1:nx+2, -1:ny+2))
-    temperature(-1:nx+2, -1:ny+2) = 0.5_num
+    !  Alfven wave excitation
+!    do n1 = -1, nx+2
+!       do n2 = -1, ny+2 
+!       energy(n1,n2) = energy(n1,n2) & 
+!       + 0.01_num * energy(n1,n2) *&
+!       EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+!       end do
+!    end do
 
-    ! If neutrals included xi_n is a function of temperature so iteration required
-    ! Set the neutral fraction if needed
-    DO ix = -1,nx+2,1
-       DO iy = -1,ny+2,1
-         IF (eos_number /= EOS_IDEAL) THEN         
-           xi_v = get_neutral(temperature(ix,iy), rho(ix,iy))
-         ELSE  
-           IF (neutral_gas) THEN
-             xi_v = 1.0_num
-           ELSE
-             xi_v = 0.0_num
-           END IF
-         END IF
-         energy(ix,iy) = (temperature(ix,iy) * (2.0_num - xi_v) &
-            + (1.0_num - xi_v) * ionise_pot * (gamma - 1.0_num)) &
-            / (gamma - 1.0_num)
-       END DO
-    END DO
-    DO ix= -1,nx+2
-        energy(ix,ny+2) = energy(ix,ny+1)
-    END DO
 
-    IF (hall_mhd) THEN
-      lambda_i(0:nx, 0:ny) = 1.0_num
-    END IF
+
+    !  Magnetoacoustic wave excitation       
+    do n1 = -2, nx+2
+       do n2 = -2, ny+2 
+       !vx(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+       
+       vy(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+       
+       !vz(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+       end do
+    end do
+
 
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
 
-    ! An example of fixing the initial field to a potential field based on specifying the lower boundary
-    ! Must have ybc_min = BC_USER for this to work
-    IF (IAND(initial, IC_NEW) /= 0) CALL potential_field
-
-    ! example use of visc3  - add viscous damping at top
-    IF (use_viscous_damping) THEN
-      width = length_x / 10.0_num
-      centre = 0.4_num * length_x + width
-      amp = 1.0_num   !adjust this value as required
-      DO iy = -1, ny + 1
-       DO ix = -1, nx + 1
-          visc3(ix,iy) = visc3(ix,iy) + amp * (1.0_num + TANH((ABS(xb(ix)) - centre) / width)) 
-        END DO
-      END DO
-    END IF
-
-    DEALLOCATE(temperature)
 
   END SUBROUTINE set_initial_conditions
 
