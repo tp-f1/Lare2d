@@ -48,59 +48,91 @@ CONTAINS
 
   SUBROUTINE set_initial_conditions
 
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: temperature
-    REAL(num) :: xi_v, amp, centre, width
+    REAL(num) :: xi_v 
+    REAL(num) :: w_tr = 0.4_num, T_ph = 10.0_num, T_cor = 1000.0_num
+    REAL(num) :: y_ph = 0.0_num, y_cor = 15.0_num
 
-    integer :: n1
-    integer :: n2
-
-
-    ! Below are all the variables which must be defined and their sizes
-
-    vx(-2:nx+2, -2:ny+2) = 0.0_num
-    vy(-2:nx+2, -2:ny+2) = 0.0_num
-    vz(-2:nx+2, -2:ny+2) = 0.0_num
-
-    bx(-2:nx+2, -1:ny+2) = 3.0_num
-    by(-1:nx+2, -2:ny+2) = 0.0_num
-    bz(-1:nx+2, -1:ny+2) = 0.0_num
-
-    rho(-1:nx+2, -1:ny+2) = 1.0_num
-    rho(-1:nx+2, (ny/2-5):(ny/2+5)) = 5.0_num
-    energy(-1:nx+2, -1:ny+2) = 1.0_num
-
-    grav(-1:ny+2) = 0.0_num
+    integer :: i
+    integer :: j
+    
+    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dy 
+    REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y, energy_y
+    REAL(num), DIMENSION(:), ALLOCATABLE :: mu 
+    
+    ALLOCATE(yc_global(-1:ny+1))
+    ALLOCATE(dy(-1:ny+1))
+    ALLOCATE(rho_y(-1:ny+2))
+    ALLOCATE(temp_y(-1:ny+2))
+    ALLOCATE(energy_y(-1:ny+2))
+    ALLOCATE(mu(-1:ny+2))
     
 
-    !  Alfven wave excitation
-!    do n1 = -1, nx+2
-!       do n2 = -1, ny+2 
-!       energy(n1,n2) = energy(n1,n2) & 
-!       + 0.01_num * energy(n1,n2) *&
-!       EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
-!       end do
-!    end do
+    DO i = -1, ny + 1
+        yc_global(i) = 0.5_num * (yb_global(i-1) + yb_global(i))
+        dy(i) = yb_global(i) - yb_global(i-1)
+    END DO 
 
+    ! Below are all the variables which must be defined and their sizes
+    
+    vx(:, :) = 0.0_num
+    vy(:, :) = 0.0_num
+    vz(:, :) = 0.0_num
 
+    bx(:, :) = 0.0_num
+    by(:, :) = 0.0_num
+    bz(:, :) = 0.0_num
 
-    !  Magnetoacoustic wave excitation       
-    do n1 = -2, nx+2
-       do n2 = -2, ny+2 
-       !vx(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
-       
-       vy(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
-       
-       !vz(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
-       end do
-    end do
+    rho(:, :) = 1.0_num
+    energy(:, :) = 1.0_num
 
+    grav(:) = 15.0_num
+    DO i = -1, ny + 2
+        IF (yb_global(i) > y_ph) THEN
+           grav(i) = grav(i) * (y_cor - yb_global(i)) / (y_cor - y_ph)  
+        END IF 
 
+        IF (yb_global(i) > y_cor) THEN
+           grav(i) = 0.0_num
+        END IF
+    END DO
+ 
+ 
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
+
+    DEALLOCATE(yc_global)
+    DEALLOCATE(dy)
+    DEALLOCATE(rho_y)
+    DEALLOCATE(temp_y)
+    DEALLOCATE(energy_y)
+    DEALLOCATE(mu)
 
 
   END SUBROUTINE set_initial_conditions
 
+  !  Alfven wave excitation
+  ! do n1 = -1, nx+2
+  !    do n2 = -1, ny+2 
+  !    energy(n1,n2 = energy(n1,n2) & 
+  !    + 0.01_num * energy(n1,n2) *&
+  !    EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+  !    end do
+  ! end do
+
+
+
+    !  Magnetoacoustic wave excitation       
+!   do n1 = -2, nx+2
+!      do n2 = -2, ny+2 
+!     !vx(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+!     
+!     vy(n1,n2) = (n2-ny/2.0_num)*EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+!     
+!     !vz(n1,n2) = EXP(-((n1-nx/2.0_num)**2 + (n2-ny/2.0_num)**2)/4.0_num)
+!      end do
+!    end do
+!
+!
 
 
   SUBROUTINE potential_field()

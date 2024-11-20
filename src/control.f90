@@ -70,8 +70,8 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 500
-    ny_global = 500
+    nx_global = 50
+    ny_global = 50
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
@@ -82,7 +82,7 @@ CONTAINS
 
     ! Shock viscosities as detailed in manual - they are dimensionless
     visc1 = 0.1_num
-    visc2 = 0.0_num
+    visc2 = 1.0_num
     ! \nabla^2 v damping 
     ! visc3 is an array set initial conditions
     use_viscous_damping = .FALSE.
