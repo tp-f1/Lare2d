@@ -48,28 +48,28 @@ CONTAINS
 
   SUBROUTINE set_initial_conditions
 
-    REAL(num) :: xi_v 
-    REAL(num) :: w_tr = 0.4_num, T_ph = 10.0_num, T_cor = 1000.0_num
-    REAL(num) :: y_ph = 0.0_num, y_cor = 15.0_num
+    REAL(num) :: w_tr = 0.6_num, T_ph = 4.5_num, T_cor = 1000.0_num
+    REAL(num) :: y_ph = 0.0_num, y_cor = 10.0_num
+    REAL(num) :: xi_v, err, mu_old
+    REAL(num) :: multiplier
 
-    integer :: i
-    integer :: j
+
+    integer :: i, jm, j, iter
     
     REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dy 
-    REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y, energy_y
-    REAL(num), DIMENSION(:), ALLOCATABLE :: mu 
-    
+    REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y
+    REAL(num), DIMENSION(:), ALLOCATABLE :: mu   
+
     ALLOCATE(yc_global(-1:ny+1))
     ALLOCATE(dy(-1:ny+1))
     ALLOCATE(rho_y(-1:ny+2))
     ALLOCATE(temp_y(-1:ny+2))
-    ALLOCATE(energy_y(-1:ny+2))
     ALLOCATE(mu(-1:ny+2))
     
 
-    DO i = -1, ny + 1
-        yc_global(i) = 0.5_num * (yb_global(i-1) + yb_global(i))
-        dy(i) = yb_global(i) - yb_global(i-1)
+    DO j = -1, ny + 1
+        yc_global(j) = 0.5_num * (yb_global(j-1) + yb_global(j))
+        dy(j) = yb_global(j) - yb_global(j-1)
     END DO 
 
     ! Below are all the variables which must be defined and their sizes
@@ -85,18 +85,94 @@ CONTAINS
     rho(:, :) = 1.0_num
     energy(:, :) = 1.0_num
 
-    grav(:) = 15.0_num
-    DO i = -1, ny + 2
-        IF (yb_global(i) > y_ph) THEN
-           grav(i) = grav(i) * (y_cor - yb_global(i)) / (y_cor - y_ph)  
+    grav(:) = 1.0_num
+    DO j = -1, ny + 2
+        IF (yb_global(j) > y_ph) THEN
+           grav(j) = grav(j) * (y_cor - yb_global(j)) / (y_cor - y_ph)  
         END IF 
 
-        IF (yb_global(i) > y_cor) THEN
-           grav(i) = 0.0_num
+        IF (yb_global(j) > y_cor) THEN
+           grav(j) = 0.0_num
         END IF
     END DO
- 
- 
+    
+    ! Setting initial values
+    rho_y(:) = 1.0_num
+    mu(:) = 1.0_num
+    
+    ! Calculate temperature and density given previous ionisation
+    ! Then recalculate ionisation and see if the value is stable
+
+    DO iter = 1, 2
+        err = 0.0_num
+        
+        ! Set temperature profiles 
+        DO j = -1, ny + 1
+            ! Below photosphere
+            IF (yc_global(j) < y_ph) THEN
+                temp_y(j) = T_ph - (gamma - 1.0_num) * (yc_global(j) - y_ph) &
+                * grav(j) * mu(j) / gamma 
+                !print*, j, mu(j)
+            END IF
+           
+            ! From photosphere to corona
+            IF (yc_global(j) >= y_ph) THEN
+                multiplier = 0.5_num * (TANH((yc_global(j) - y_cor) / w_tr) + 1.0_num)
+                temp_y(j) = T_ph + (T_cor - T_ph) * multiplier
+            END IF
+        END DO
+       
+        temp_y(ny + 2) = temp_y(ny + 1)
+        
+        ! Calculate density profiles
+        
+        ! Going down from photosphere
+        DO jm = ny, 0, -1
+            IF (yc_global(jm) < y_ph) THEN
+                j = jm + 1
+                multiplier = (temp_y(j) / mu(j) / dy(j) + grav(j) * 0.5_num) &
+                    / (temp_y(jm) / mu(jm) / dy(jm) - grav(jm) * 0.5_num)
+                rho_y(jm) = rho_y(j) * multiplier 
+                !print*, jm, temp_y(jm) 
+           END IF
+        END DO
+
+        !  Going up from photosphere
+        DO j = 0, ny
+            IF (yc_global(j) >= y_ph) THEN
+                jm = j - 1
+                multiplier = (temp_y(jm) / mu(jm) / dy(jm) - grav(jm) * 0.5_num) &
+                / (temp_y(j) / mu(j) / dy(j) + grav(j) * 0.5_num)
+                rho_y(j) = rho_y(jm) * multiplier
+                !print*, j, temp_y(j)
+            END IF
+        END DO
+                 
+        ! Calculate largest difference between new ionisation 
+        ! and ionisation from previous iteration
+        DO j = 0, ny
+            xi_v = get_neutral(temp_y(j), rho_y(j))
+            print*, yc_global(j), temp_y(j), rho_y(j), grav(j)
+            mu_old = mu(j)
+            mu(j) = 1.0_num / (2.0_num - xi_v)
+            err = MAX(err, ABS(mu(j) - mu_old))
+        END DO
+        
+        IF (err < 1.0e-16_num) EXIT
+
+    END DO            
+    
+    rho_y(ny + 1: ny + 2) = rho_y(ny)
+    ! Set full initial conditions from calculated profiles
+    DO j = -1, ny + 2
+        DO i = -1, nx + 2
+            rho(i, j) = rho_y(j)
+            xi_v = get_neutral(temp_y(j), rho_y(j))
+            energy(i, j) = temp_y(j) * (2.0_num - xi_v) / (gamma - 1.0_num) &
+                + (1.0_num - xi_v) * ionise_pot
+        END DO
+    END DO
+
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
 
@@ -104,7 +180,6 @@ CONTAINS
     DEALLOCATE(dy)
     DEALLOCATE(rho_y)
     DEALLOCATE(temp_y)
-    DEALLOCATE(energy_y)
     DEALLOCATE(mu)
 
 

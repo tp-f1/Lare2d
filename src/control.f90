@@ -70,15 +70,15 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 50
-    ny_global = 50
+    nx_global = 25 
+    ny_global = 25
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
     nsteps = -1 
 
     ! The maximum runtime of the code
-    t_end = 11.0_num
+    t_end = 25.0_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
     visc1 = 0.1_num
@@ -100,13 +100,13 @@ CONTAINS
     x_stretch = .FALSE.
 
     ! The length of the domain in the y direction
-    y_min = -40.0_num
+    y_min = -3.0_num
     y_max = 40.0_num
     ! Should the y grid be stretched or uniform
     y_stretch = .FALSE.
 
     ! Turn on or off the resistive parts of the MHD equations
-    resistive_mhd = .FALSE.
+    resistive_mhd = .TRUE.
 
     ! The background resistivity expressed as the inverse Lundquist number
     eta_background = 0.0_num
@@ -127,7 +127,7 @@ CONTAINS
     ! with steep temperature gradients and very hot regions with
     ! large thermal conductivity. For many problems it is however
     ! fine.
-    conduction = .FALSE.
+    conduction = .TRUE.
     ! Apply a flux limiter to stop heat flows exceeding free streaming limit
     heat_flux_limiter = .FALSE.
     ! Fraction of free streaming heat flux used if limiter on
@@ -158,21 +158,21 @@ CONTAINS
     ! If cowling_resistivity is true then the code calculates and
     ! applies the Cowling Resistivity to the MHD equations
     ! only possible if not EOS_IDEAL
-    ! resistive_mhd must be TRUE for this to actaully be applied
-    cowling_resistivity = .FALSE.
+    ! resistive_mhd must be TRUE for this to actually be applied
+    cowling_resistivity = .TRUE.
 
     ! Set the boundary conditions on the four edges of the simulation domain
     ! Valid constants are
     ! BC_PERIODIC - Periodic boundary conditions
     ! BC_OPEN     - Riemann far-field characteristic boundary conditions
     ! BC_USER     - User boundary conditions specified in boundary.f90
-    xbc_min = BC_PERIODIC 
-    xbc_max = BC_PERIODIC
-    ybc_min = BC_PERIODIC 
-    ybc_max = BC_PERIODIC
+    xbc_min = BC_OPEN
+    xbc_max = BC_OPEN
+    ybc_min = BC_USER
+    ybc_max = BC_OPEN
 
     !If any user boundaries are driven set this flag
-    driven_boundary = .FALSE.
+    driven_boundary = .TRUE.
 
     ! Control Boris scheme for limiting the Alfven speed
     ! Logical boris to turn on/off
@@ -186,7 +186,7 @@ CONTAINS
     ! EOS_PI    - Simple ideal gas for partially ionised plasma
     ! EOS_ION   - EOS_PI plus the ionisation potential
     ! N.B. read the manual for notes on these choices
-    eos_number = EOS_IDEAL
+    eos_number = EOS_ION
     ! EOS_IDEAL also requires that you specific whether
     ! the gas is ionised or not. Some stratified atmospheres
     ! only work for neutral hydrogen even though using MHD
