@@ -48,32 +48,37 @@ CONTAINS
 
   SUBROUTINE set_initial_conditions
 
-    REAL(num) :: w_tr = 0.6_num, T_ph = 4.5_num, T_cor = 1000.0_num
-    REAL(num) :: y_ph = 0.0_num, y_cor = 10.0_num
-    REAL(num) :: xi_v, err, mu_old
-    REAL(num) :: multiplier
+    REAL(num) :: w_tr = 0.6_num, T_ph = 9.31_num, T_cor = 2000.0_num
+    REAL(num) :: y_ph = 0.0_num, y_cor = 11.0_num
+    REAL(num) :: xi_v, error, mu_old
+    REAL(num) :: multiplier, lower, upper, dg
 
 
-    integer :: i, jm, j, iter
+    integer :: i, jm, j, iter 
     
-    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dy 
+    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dyb, dyc 
     REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y
     REAL(num), DIMENSION(:), ALLOCATABLE :: mu   
 
     ALLOCATE(yc_global(-1:ny+1))
-    ALLOCATE(dy(-1:ny+1))
+    ALLOCATE(dyb(-1:ny+1))
+    ALLOCATE(dyc(-1:ny+1))
     ALLOCATE(rho_y(-1:ny+2))
     ALLOCATE(temp_y(-1:ny+2))
     ALLOCATE(mu(-1:ny+2))
     
-
+    ! Calculate y-coordinate of the centres 
     DO j = -1, ny + 1
         yc_global(j) = 0.5_num * (yb_global(j-1) + yb_global(j))
-        dy(j) = yb_global(j) - yb_global(j-1)
     END DO 
-
-    ! Below are all the variables which must be defined and their sizes
     
+    ! Calculate grid spacings
+    DO j = -1, ny 
+        dyc(j) = yc_global(j+1) - yc_global(j)
+        dyb(j) = yb_global(j) - yb_global(j-1)
+    END DO
+
+    ! Initialise velocity and magnetic field to zero  
     vx(:, :) = 0.0_num
     vy(:, :) = 0.0_num
     vz(:, :) = 0.0_num
@@ -82,37 +87,46 @@ CONTAINS
     by(:, :) = 0.0_num
     bz(:, :) = 0.0_num
 
-    rho(:, :) = 1.0_num
-    energy(:, :) = 1.0_num
-
-    grav(:) = 1.0_num
+    ! Normalise gravity to value at photosphere
+    grav(:) = 11.5_num
+    
+    ! Set gravity to zero smoothly below upper boundary
+    ! For boundary condition purposes
+    lower = yb_global(ny) - 20.0_num 
+    upper = yb_global(ny) - 5.0_num
     DO j = -1, ny + 2
         IF (yb_global(j) > y_ph) THEN
-           grav(j) = grav(j) * (y_cor - yb_global(j)) / (y_cor - y_ph)  
+             grav(j) = grav(j) * (3.87e3_num &
+                / ((yb_global(j) - y_ph) + 3.87e3_num))**2
+        END IF
+
+        IF (yb_global(j) > lower) THEN
+            grav(j) = grav(j) * 0.5_num &
+                * (1.0_num + COS(pi * (yb_global(j) - lower) / (upper - lower)))
         END IF 
 
-        IF (yb_global(j) > y_cor) THEN
+        IF (yb_global(j) > upper) THEN
            grav(j) = 0.0_num
         END IF
     END DO
     
+    
     ! Setting initial values
     rho_y(:) = 1.0_num
     mu(:) = 1.0_num
-    
+          
     ! Calculate temperature and density given previous ionisation
     ! Then recalculate ionisation and see if the value is stable
 
-    DO iter = 1, 2
-        err = 0.0_num
+    DO iter = 1, 1000
+        error =  0.0_num
         
         ! Set temperature profiles 
-        DO j = -1, ny + 1
+        DO j = -1, ny 
             ! Below photosphere
             IF (yc_global(j) < y_ph) THEN
                 temp_y(j) = T_ph - (gamma - 1.0_num) * (yc_global(j) - y_ph) &
-                * grav(j) * mu(j) / gamma 
-                !print*, j, mu(j)
+                 * grav(j) * mu(j) / gamma 
             END IF
            
             ! From photosphere to corona
@@ -122,29 +136,31 @@ CONTAINS
             END IF
         END DO
        
-        temp_y(ny + 2) = temp_y(ny + 1)
+        temp_y(ny+1:ny+2) = temp_y(ny)
         
         ! Calculate density profiles
         
         ! Going down from photosphere
-        DO jm = ny, 0, -1
-            IF (yc_global(jm) < y_ph) THEN
-                j = jm + 1
-                multiplier = (temp_y(j) / mu(j) / dy(j) + grav(j) * 0.5_num) &
-                    / (temp_y(jm) / mu(jm) / dy(jm) - grav(jm) * 0.5_num)
+        DO j = ny, 0, -1
+            IF (yc_global(j) < y_ph) THEN
+                jm = j - 1
+                dg = 1.0_num / (dyb(j) + dyb(jm))
+                multiplier = (temp_y(j) / mu(j) / dyc(jm) + grav(jm) * 0.5_num ) &
+                    / (temp_y(jm) / mu(jm) / dyc(jm) - grav(jm) * 0.5_num)
                 rho_y(jm) = rho_y(j) * multiplier 
-                !print*, jm, temp_y(jm) 
-           END IF
+                !print*, yb_global(j), temp_y(j), rho_y(j), dg
+            END IF
         END DO
 
         !  Going up from photosphere
         DO j = 0, ny
             IF (yc_global(j) >= y_ph) THEN
                 jm = j - 1
-                multiplier = (temp_y(jm) / mu(jm) / dy(jm) - grav(jm) * 0.5_num) &
-                / (temp_y(j) / mu(j) / dy(j) + grav(j) * 0.5_num)
+                dg = 1.0_num / (dyb(j) + dyb(jm))
+                multiplier = (temp_y(jm) / mu(jm) / dyc(jm) - grav(jm) * 0.5_num) &
+                / (temp_y(j) / mu(j) / dyc(jm) + grav(jm) * 0.5_num )
                 rho_y(j) = rho_y(jm) * multiplier
-                !print*, j, temp_y(j)
+                !print*, yb_global(j), temp_y(j), rho_y(j), dg
             END IF
         END DO
                  
@@ -152,17 +168,18 @@ CONTAINS
         ! and ionisation from previous iteration
         DO j = 0, ny
             xi_v = get_neutral(temp_y(j), rho_y(j))
-            print*, yc_global(j), temp_y(j), rho_y(j), grav(j)
             mu_old = mu(j)
             mu(j) = 1.0_num / (2.0_num - xi_v)
-            err = MAX(err, ABS(mu(j) - mu_old))
+            error = MAX(error, ABS(mu(j) - mu_old))
         END DO
         
-        IF (err < 1.0e-16_num) EXIT
+        IF (error < 1.0e-16_num) EXIT
 
     END DO            
-    
+
+    rho_y(-1) = rho_y(0) 
     rho_y(ny + 1: ny + 2) = rho_y(ny)
+    
     ! Set full initial conditions from calculated profiles
     DO j = -1, ny + 2
         DO i = -1, nx + 2
@@ -171,13 +188,25 @@ CONTAINS
             energy(i, j) = temp_y(j) * (2.0_num - xi_v) / (gamma - 1.0_num) &
                 + (1.0_num - xi_v) * ionise_pot
         END DO
+        IF (j < ny - 2) THEN
+        dg = (temp_y(j) / mu(j) + temp_y(j+1) / mu(j+1)) * (rho_y(j+1) - rho_y(j))  / 2 / dyc(j) & 
+            + (rho_y(j) + rho_y(j+1)) * (temp_y(j+1) / mu(j+1) - temp_y(j) / mu(j)) / 2 / dyc(j)
+        error = - (rho_y(j) + rho_y(j+1)) * grav(j) / 2
+        print*, yb_global(j), mu(j)
+        END IF
+
+    END DO
+
+    DO i = - 1, nx + 2
+        energy(i, ny+2) = energy(i, ny+1)
     END DO
 
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
 
     DEALLOCATE(yc_global)
-    DEALLOCATE(dy)
+    DEALLOCATE(dyb)
+    DEALLOCATE(dyc)
     DEALLOCATE(rho_y)
     DEALLOCATE(temp_y)
     DEALLOCATE(mu)

@@ -146,7 +146,6 @@ CONTAINS
     REAL(num) :: T, rho0, e0, dx, x, fa, xi_a
     REAL(num), DIMENSION(2) :: ta
     INTEGER :: loop
-
     DO iy = -1, ny + 2
       DO ix = -1, nx + 2
         rho0 = rho(ix,iy)
@@ -156,6 +155,7 @@ CONTAINS
 
         IF (ta(1) > ta(2)) THEN
           PRINT*, 'Temperature bounds problem', ta
+          PRINT*, iy
           STOP
         END IF
 

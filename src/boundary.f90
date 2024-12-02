@@ -312,15 +312,16 @@ CONTAINS
     END IF
 
     IF (proc_y_min == MPI_PROC_NULL .AND. ybc_min == BC_USER) THEN
-      vx(:,-2:0) = 0.0_num
-      vy(:,-2:0) = 0.0_num
-      CALL produce_spectrum(vz(:,-2:0), time, 1.0_num)
+      vx(:, -2:0) = 0.0_num
+      vz(:, -2:0) = 0.0_num
+      vy(:, -2:0) = 0.0_num 
     END IF
 
     IF (proc_y_max == MPI_PROC_NULL .AND. ybc_max == BC_USER) THEN
-      vx(:,ny:ny+2) = 0.0_num
-      vy(:,ny:ny+2) = 0.0_num
+      vx(:,ny+2) = 0.0_num
       vz(:,ny:ny+2) = 0.0_num
+      vy(:,ny+1) = vy(:,ny)
+      vy(:,ny+2) = vy(:,ny-1)
     END IF
 
   END SUBROUTINE velocity_bcs

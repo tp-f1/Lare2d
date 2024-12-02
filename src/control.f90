@@ -70,15 +70,15 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 25 
-    ny_global = 25
+    nx_global = 5 
+    ny_global = 500 
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
     nsteps = -1 
 
     ! The maximum runtime of the code
-    t_end = 25.0_num
+    t_end = 0.01_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
     visc1 = 0.1_num
@@ -94,19 +94,19 @@ CONTAINS
     nprocy = 0
 
     ! The length of the domain in the x direction
-    x_min = -40.0_num
-    x_max = 40.0_num
+    x_min = -20.0_num
+    x_max = 20.0_num
     ! Should the x grid be stretched or uniform
     x_stretch = .FALSE.
 
     ! The length of the domain in the y direction
-    y_min = -3.0_num
-    y_max = 40.0_num
+    y_min = -10.0_num
+    y_max = 80.0_num
     ! Should the y grid be stretched or uniform
     y_stretch = .FALSE.
 
     ! Turn on or off the resistive parts of the MHD equations
-    resistive_mhd = .TRUE.
+    resistive_mhd = .FALSE.
 
     ! The background resistivity expressed as the inverse Lundquist number
     eta_background = 0.0_num
@@ -127,7 +127,7 @@ CONTAINS
     ! with steep temperature gradients and very hot regions with
     ! large thermal conductivity. For many problems it is however
     ! fine.
-    conduction = .TRUE.
+    conduction = .FALSE.
     ! Apply a flux limiter to stop heat flows exceeding free streaming limit
     heat_flux_limiter = .FALSE.
     ! Fraction of free streaming heat flux used if limiter on
@@ -166,13 +166,13 @@ CONTAINS
     ! BC_PERIODIC - Periodic boundary conditions
     ! BC_OPEN     - Riemann far-field characteristic boundary conditions
     ! BC_USER     - User boundary conditions specified in boundary.f90
-    xbc_min = BC_OPEN
-    xbc_max = BC_OPEN
+    xbc_min = BC_PERIODIC
+    xbc_max = BC_PERIODIC
     ybc_min = BC_USER
-    ybc_max = BC_OPEN
+    ybc_max = BC_USER
 
     !If any user boundaries are driven set this flag
-    driven_boundary = .TRUE.
+    driven_boundary = .FALSE.
 
     ! Control Boris scheme for limiting the Alfven speed
     ! Logical boris to turn on/off
