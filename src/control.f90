@@ -78,7 +78,7 @@ CONTAINS
     nsteps = -1 
 
     ! The maximum runtime of the code
-    t_end = 0.01_num
+    t_end = 50.0_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
     visc1 = 0.1_num
@@ -127,7 +127,7 @@ CONTAINS
     ! with steep temperature gradients and very hot regions with
     ! large thermal conductivity. For many problems it is however
     ! fine.
-    conduction = .FALSE.
+    conduction = .TRUE.
     ! Apply a flux limiter to stop heat flows exceeding free streaming limit
     heat_flux_limiter = .FALSE.
     ! Fraction of free streaming heat flux used if limiter on
@@ -135,17 +135,17 @@ CONTAINS
 
     ! Use radiation as specified in SUBROUTINE rad_losses
     ! in src/radiative.f90
-    radiation = .FALSE.
+    radiation = .TRUE.
 
     ! Include user specified heating function as specified in 
     ! SUBROUTINE rad_losses user_defined_heating in src/radiative.f90
-    coronal_heating = .FALSE.
+    coronal_heating = .TRUE.
 
     ! Remap kinetic energy correction. LARE does not perfectly conserve kinetic
     ! energy during the remap step. This missing energy can be added back into
     ! the simulation as a uniform heating. Setting rke to true turns on this
     ! addition.
-    rke = .FALSE.
+    rke = .TRUE.
 
     ! The code to choose the initial conditions. The valid choices are
     ! IC_NEW     - Use set_initial_conditions in "initial_conditions.f90" to
@@ -155,11 +155,10 @@ CONTAINS
     initial = IC_NEW
     restart_snapshot = 1
 
-    ! If cowling_resistivity is true then the code calculates and
     ! applies the Cowling Resistivity to the MHD equations
     ! only possible if not EOS_IDEAL
     ! resistive_mhd must be TRUE for this to actually be applied
-    cowling_resistivity = .TRUE.
+    cowling_resistivity = .FALSE.
 
     ! Set the boundary conditions on the four edges of the simulation domain
     ! Valid constants are
@@ -200,7 +199,7 @@ CONTAINS
     !Tweak this to get a "good" cooling function that doesn't just remove all
     !heating effects
     ! Works for viscosity and first order resistive effects
-    cooling_term = .TRUE.
+    cooling_term = .FALSE.
     alpha_av = 0.05_num
 
   END SUBROUTINE control_variables
@@ -217,7 +216,7 @@ CONTAINS
     data_dir = 'Data'
 
     ! The interval between output snapshots.
-    dt_snapshots = t_end / 11.0_num
+    dt_snapshots = t_end / 21.0_num
 
     ! Force dt to adjust to output exactly at times set by dt_snapshots
     force_exact_time_outputs = .TRUE.

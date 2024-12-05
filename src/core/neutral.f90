@@ -169,7 +169,7 @@ CONTAINS
           fa = x - (gamma - 1.0_num) &
               * (e0 - (1.0_num - xi_a) * ionise_pot) / (2.0_num - xi_a)
           IF (fa <= 0.0_num) t = x
-          IF (ABS(dx) < 1.e-8_num .OR. ABS(fa) < 1.e-8_num) EXIT
+          IF (ABS(dx) < 1.e-16_num .OR. ABS(fa) < 1.e-16_num) EXIT
         END DO
 
         xi_n(ix,iy) = get_neutral(x, rho0)

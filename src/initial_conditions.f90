@@ -56,13 +56,13 @@ CONTAINS
 
     integer :: i, jm, j, iter 
     
-    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dyb, dyc 
+    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dy_b, dy_c 
     REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y
     REAL(num), DIMENSION(:), ALLOCATABLE :: mu   
 
     ALLOCATE(yc_global(-1:ny+1))
-    ALLOCATE(dyb(-1:ny+1))
-    ALLOCATE(dyc(-1:ny+1))
+    ALLOCATE(dy_b(-1:ny+1))
+    ALLOCATE(dy_c(-1:ny+1))
     ALLOCATE(rho_y(-1:ny+2))
     ALLOCATE(temp_y(-1:ny+2))
     ALLOCATE(mu(-1:ny+2))
@@ -74,8 +74,8 @@ CONTAINS
     
     ! Calculate grid spacings
     DO j = -1, ny 
-        dyc(j) = yc_global(j+1) - yc_global(j)
-        dyb(j) = yb_global(j) - yb_global(j-1)
+        dy_c(j) = yc_global(j+1) - yc_global(j)
+        dy_b(j) = yb_global(j) - yb_global(j-1)
     END DO
 
     ! Initialise velocity and magnetic field to zero  
@@ -114,7 +114,10 @@ CONTAINS
     ! Setting initial values
     rho_y(:) = 1.0_num
     mu(:) = 1.0_num
-          
+    IF (eos_number == EOS_IDEAL .AND. (.NOT. neutral_gas)) THEN
+        mu(:) = 0.5_num
+    END IF
+
     ! Calculate temperature and density given previous ionisation
     ! Then recalculate ionisation and see if the value is stable
 
@@ -138,75 +141,83 @@ CONTAINS
        
         temp_y(ny+1:ny+2) = temp_y(ny)
         
-        ! Calculate density profiles
-        
+        ! Calculate density profiles using hydrostatic equilibrium
         ! Going down from photosphere
         DO j = ny, 0, -1
             IF (yc_global(j) < y_ph) THEN
                 jm = j - 1
-                dg = 1.0_num / (dyb(j) + dyb(jm))
-                multiplier = (temp_y(j) / mu(j) / dyc(jm) + grav(jm) * 0.5_num ) &
-                    / (temp_y(jm) / mu(jm) / dyc(jm) - grav(jm) * 0.5_num)
+                dg = 1.0_num / (dy_b(j) + dy_b(jm))
+                multiplier = (temp_y(j) / mu(j)   / dy_c(jm) + grav(jm) * dy_b(j) * dg) &
+                    / (temp_y(jm) / mu(jm)  / dy_c(jm) - grav(jm) * dy_b(jm) * dg)
                 rho_y(jm) = rho_y(j) * multiplier 
-                !print*, yb_global(j), temp_y(j), rho_y(j), dg
             END IF
         END DO
 
-        !  Going up from photosphere
+        !  Going up from photosphere  
         DO j = 0, ny
             IF (yc_global(j) >= y_ph) THEN
                 jm = j - 1
-                dg = 1.0_num / (dyb(j) + dyb(jm))
-                multiplier = (temp_y(jm) / mu(jm) / dyc(jm) - grav(jm) * 0.5_num) &
-                / (temp_y(j) / mu(j) / dyc(jm) + grav(jm) * 0.5_num )
+                dg = 1.0_num / (dy_b(j) + dy_b(jm))
+                multiplier = (temp_y(jm) / mu(jm) / dy_c(jm) - grav(jm) * dy_b(jm) * dg) &
+                / (temp_y(j) / mu(j)  / dy_c(jm) + grav(jm) * dy_b(j) * dg)
                 rho_y(j) = rho_y(jm) * multiplier
-                !print*, yb_global(j), temp_y(j), rho_y(j), dg
             END IF
         END DO
                  
         ! Calculate largest difference between new ionisation 
         ! and ionisation from previous iteration
-        DO j = 0, ny
-            xi_v = get_neutral(temp_y(j), rho_y(j))
-            mu_old = mu(j)
-            mu(j) = 1.0_num / (2.0_num - xi_v)
-            error = MAX(error, ABS(mu(j) - mu_old))
-        END DO
+        IF (eos_number /= EOS_IDEAL) THEN
+            DO j = 0, ny
+                xi_v = get_neutral(temp_y(j), rho_y(j))
+                mu_old = mu(j)
+                mu(j) = 1.0_num / (2.0_num - xi_v)
+                error = MAX(error, ABS(mu(j) - mu_old))
+            END DO
+        END IF
         
-        IF (error < 1.0e-16_num) EXIT
+        ! Exit if stable value found
+        IF (error < 1.0e-18_num) EXIT
 
     END DO            
 
-    rho_y(-1) = rho_y(0) 
+    rho_y(-1) = rho_y(0)
     rho_y(ny + 1: ny + 2) = rho_y(ny)
     
     ! Set full initial conditions from calculated profiles
+    print*, n_global_min(2)
     DO j = -1, ny + 2
         DO i = -1, nx + 2
             rho(i, j) = rho_y(j)
-            xi_v = get_neutral(temp_y(j), rho_y(j))
+            IF (eos_number /= EOS_IDEAL) THEN
+                xi_v = get_neutral(temp_y(j), rho_y(j))
+            ELSE 
+                IF (neutral_gas) THEN
+                    xi_v = 1.0_num
+                ELSE 
+                    xi_v = 0.0_num
+                END IF
+            END IF
             energy(i, j) = temp_y(j) * (2.0_num - xi_v) / (gamma - 1.0_num) &
                 + (1.0_num - xi_v) * ionise_pot
         END DO
-        IF (j < ny - 2) THEN
-        dg = (temp_y(j) / mu(j) + temp_y(j+1) / mu(j+1)) * (rho_y(j+1) - rho_y(j))  / 2 / dyc(j) & 
-            + (rho_y(j) + rho_y(j+1)) * (temp_y(j+1) / mu(j+1) - temp_y(j) / mu(j)) / 2 / dyc(j)
-        error = - (rho_y(j) + rho_y(j+1)) * grav(j) / 2
-        print*, yb_global(j), mu(j)
+        IF (j==35) THEN
+            print*, ionise_pot, xi_v, rho(nx, j)
         END IF
-
     END DO
 
     DO i = - 1, nx + 2
         energy(i, ny+2) = energy(i, ny+1)
     END DO
+!    print*, "34", energy(nx,34) 
+!    print*, "35", ionise_pot, x 
+ !   print*, "36", energy(nx,36) 
 
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
 
     DEALLOCATE(yc_global)
-    DEALLOCATE(dyb)
-    DEALLOCATE(dyc)
+    DEALLOCATE(dy_b)
+    DEALLOCATE(dy_c)
     DEALLOCATE(rho_y)
     DEALLOCATE(temp_y)
     DEALLOCATE(mu)
@@ -214,7 +225,7 @@ CONTAINS
 
   END SUBROUTINE set_initial_conditions
 
-  !  Alfven wave excitation
+   !  Alfven wave excitation
   ! do n1 = -1, nx+2
   !    do n2 = -1, ny+2 
   !    energy(n1,n2 = energy(n1,n2) & 
