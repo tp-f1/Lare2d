@@ -49,7 +49,7 @@ CONTAINS
   SUBROUTINE set_initial_conditions
 
     REAL(num) :: w_tr = 0.6_num, T_ph = 9.31_num, T_cor = 2000.0_num
-    REAL(num) :: y_ph = 0.0_num, y_cor = 11.0_num
+    REAL(num) :: y_ph = 0.0_num, y_cor = 11.0_num, w = 0.01
     REAL(num) :: xi_v, error, mu_old
     REAL(num) :: multiplier, lower, upper, dg
 
@@ -78,14 +78,16 @@ CONTAINS
         dy_b(j) = yb_global(j) - yb_global(j-1)
     END DO
 
-    ! Initialise velocity and magnetic field to zero  
+    ! Initialise velocity and magnetic field  
     vx(:, :) = 0.0_num
     vy(:, :) = 0.0_num
     vz(:, :) = 0.0_num
 
     bx(:, :) = 0.0_num
-    by(:, :) = 0.0_num
-    bz(:, :) = 0.0_num
+    DO i = -1, nx+2
+        by(i, :) = -tanh(xb_global(i) / w)
+        bz(i, :) = 1.0_num / cosh(xb_global(i) / w)
+    END DO
 
     ! Normalise gravity to value at photosphere
     grav(:) = 11.5_num
@@ -179,7 +181,7 @@ CONTAINS
         IF (error < 1.0e-18_num) EXIT
 
     END DO            
-
+    
     rho_y(-1) = rho_y(0)
     rho_y(ny + 1: ny + 2) = rho_y(ny)
     
@@ -205,12 +207,24 @@ CONTAINS
         END IF
     END DO
 
+
     DO i = - 1, nx + 2
         energy(i, ny+2) = energy(i, ny+1)
     END DO
-!    print*, "34", energy(nx,34) 
-!    print*, "35", ionise_pot, x 
- !   print*, "36", energy(nx,36) 
+   
+    
+    ! Analytic potential field
+!    CALL potential_field_analytic()
+    
+    ! Field generated from dipolar footpoints
+    !CALL potential_field()
+
+    ! Set up simple energy pulse
+!    DO j = 1, ny
+!        energy(:,j) = 1.0_num & 
+!            + EXP(-(j-ny/2.0_num)**2 / 4.0_num)
+!        rho(:,j) = 1.0_num 
+!    END DO
 
     ! If probe points needed add them here
     CALL add_probe(0.0_num, 0.0_num)
@@ -248,7 +262,50 @@ CONTAINS
 !    end do
 !
 !
+  SUBROUTINE potential_field_analytic()
 
+        REAL(num), DIMENSION(:,:), ALLOCATABLE :: phi
+        INTEGER :: i, j
+
+        ALLOCATE(phi(-1:nx+2, -1:ny+2))
+
+
+        phi(:,:) = 0.0_num
+        DO i = -1, nx+2
+          DO j = ny+2, -1, -1
+              IF (yb_global(j) >= -10.0_num) THEN
+                  phi(i,j) = sin(pi / 2 * xb_global(i) / xb_global(nx)) &
+                      * exp(- pi / 2 * (yb_global(j) + 10) / xb_global(nx))
+                  !phi(i,j) = - tanh(pi / 2 * xb_global(i) / xb_global(nx)) * yb_global(j)  
+                  !phi(i,j) = atan((yb_global(j) - 10.0-num) / xb_global(i)) 
+                
+              ELSE 
+                  phi(i,j) = phi(i,j+1)
+              END IF
+          END DO  
+        END DO    
+        
+        DO iy = 0, ny
+            DO ix = 0, nx
+                bx(ix,iy) = -(phi(ix+1,iy)-phi(ix,iy))/dxc(ix)
+            END DO
+            bx(0, iy) = bx(1, iy) 
+            bx(nx+1, iy) = bx(nx, iy)
+        END DO
+    
+        DO ix = 0, nx
+            DO iy = 0, ny
+                by(ix,iy) = -(phi(ix,iy+1)-phi(ix,iy))/dyc(iy)
+            END DO
+            by(ix, -1) = by(ix, 0)
+            by(ix, ny+1) = by(ix, ny)
+        END DO
+  
+        CALL bfield_bcs
+
+        DEALLOCATE(phi)
+
+    END SUBROUTINE potential_field_analytic
 
   SUBROUTINE potential_field()
 
@@ -256,87 +313,69 @@ CONTAINS
       REAL(num) :: w, errmax, error, residual, fractional_error
       REAL(num) :: by_min, by_min_local
       REAL(num) :: by_max, by_max_local
-      INTEGER :: loop, x1, y1, redblack
+      INTEGER :: loop, x1, y1, redblack, i, j, n
       LOGICAL :: converged
-
+      
       ALLOCATE(phi(-1:nx+2,-1:ny+2))
-      phi = 0.0_num
+      phi(:,:) = 0.0_num
       CALL phi_mpi
-
+      
       converged = .FALSE.
       w = 2.0_num / (1.0_num + SIN(pi / REAL(nx_global,num)))
-      fractional_error = 1.e-8_num
+      fractional_error = 1.e-10_num
 
-      ! Iterate to get phi^{n+1} by SOR Gauss-Seidel
+      !Iterate to get phi^{n+1} by SOR Gauss-Seidel
       iterate: DO loop = 1, 10000000
-        errmax = 0.0_num
-        error = 0.0_num
-        y1 = 1
-        DO redblack = 1, 2
-          x1 = y1
-          DO iy = 1, ny 
-            iym = iy - 1
-            iyp = iy + 1
-            DO ix = x1, nx, 2
-              ixm = ix - 1
-              ixp = ix + 1
-              residual = &
-                  ((phi(ixp,iy) - phi(ix,iy))/dxc(ix) - (phi(ix,iy) - phi(ixm,iy))/dxc(ixm)) / dxb(ix) &
-                + ((phi(ix,iyp) - phi(ix,iy))/dyc(iy) - (phi(ix,iy) - phi(ix,iym))/dyc(iym)) / dyb(iy)
-              residual = residual / ((1.0_num/dxc(ix) +1.0_num/dxc(ixm))/dxb(ix) &
-                                  +  (1.0_num/dyc(iy) +1.0_num/dyc(iym))/dyb(iy))
-              phi(ix,iy) = phi(ix,iy) + w * residual 
-              error = ABS(residual) 
-              errmax = MAX(errmax, error)
-            END DO
-            CALL phi_mpi
-            x1 = 3 - x1
-          END DO
-          CALL phi_mpi
-          y1 = 3 - y1
-        END DO
-        CALL MPI_ALLREDUCE(errmax, error, 1, mpireal, MPI_MAX, comm, errcode)
-        IF (rank == 0 .AND. (MOD(loop,1000).EQ.0)) print *, 'loop, residual = ', loop, error
-        IF (error < fractional_error) THEN
-          converged = .TRUE.
-          EXIT iterate
-        END IF
-      END DO iterate
+      errmax = 0.0_num
+      error = 0.0_num
+      y1 = 1
+      DO redblack = 1, 2
+       x1 = y1
+       DO iy = 1, ny 
+         iym = iy - 1
+         iyp = iy + 1
+         DO ix = x1, nx, 2
+           ixm = ix - 1
+           ixp = ix + 1
+           residual = &
+               ((phi(ixp,iy) - phi(ix,iy))/dxc(ix) - (phi(ix,iy) - phi(ixm,iy))/dxc(ixm)) / dxb(ix) &
+             + ((phi(ix,iyp) - phi(ix,iy))/dyc(iy) - (phi(ix,iy) - phi(ix,iym))/dyc(iym)) / dyb(iy)
+           residual = residual / ((1.0_num/dxc(ix) +1.0_num/dxc(ixm))/dxb(ix) &
+                              +  (1.0_num/dyc(iy) +1.0_num/dyc(iym))/dyb(iy))
+           phi(ix,iy) = phi(ix,iy) + w * residual 
+           error = ABS(residual) 
+           errmax = MAX(errmax, error)
+         END DO
+         CALL phi_mpi
+         x1 = 3 - x1
+       END DO
+       CALL phi_mpi
+       y1 = 3 - y1
+     END DO
+     CALL MPI_ALLREDUCE(errmax, error, 1, mpireal, MPI_MAX, comm, errcode)
+     IF (rank == 0 .AND. (MOD(loop,1000).EQ.0)) print *, 'loop, residual = ', loop, error
+     IF (error < fractional_error) THEN
+       converged = .TRUE.
+       EXIT iterate
+     END IF
+    END DO iterate
 
-      IF (rank == 0 .AND. .NOT. converged) PRINT*, 'potential_field failed'
+    IF (rank == 0 .AND. .NOT. converged) PRINT*, 'potential_field failed'
 
-      DO ix = 0, nx
-        DO iy = 1, ny
+      DO iy = 0, ny
+        DO ix = 0, nx
           bx(ix,iy) = -(phi(ix+1,iy)-phi(ix,iy))/dxc(ix)
         END DO
       END DO
-
-      DO ix = 1, nx
+    
+      DO ix = 0, nx
         DO iy = 0, ny
           by(ix,iy) = -(phi(ix,iy+1)-phi(ix,iy))/dyc(iy)
         END DO
       END DO
-
+      
+      
       CALL bfield_bcs
-
-      !Only incoming flux on lower boundary
-      by_min_local = MAXVAL(by)
-      IF (proc_y_min == MPI_PROC_NULL) THEN
-        by_min_local = MINVAL(by(1:nx,0))
-      END IF
-      CALL MPI_ALLREDUCE(by_min_local, by_min, 1, mpireal, MPI_MIN, comm, errcode)
-      by = by - MIN(by_min, 0.0_num)
-
-      !Find maximum By on lower boundary
-      by_max_local = MINVAL(by)
-      IF (proc_y_min == MPI_PROC_NULL) THEN
-        by_max_local = MAXVAL(by(1:nx,0))
-      END IF
-      CALL MPI_ALLREDUCE(by_max_local, by_max, 1, mpireal, MPI_MAX, comm, errcode) 
-
-      !Scale the field to maximum of 1 in normalised units  
-      by = by / by_max 
-      bx = bx / by_max 
 
       DEALLOCATE(phi)
 
@@ -364,12 +403,15 @@ CONTAINS
             phi(-1,  -1), 1, cell_yface, proc_y_min, tag, &
             comm, status, errcode)
 
-        !Unipolar flux
+        !Dipolar flux
         local_flux = 0.0_num
         IF (proc_y_min == MPI_PROC_NULL) THEN
-          phi(1:nx,0) = phi(1:nx,1) + dyc(1) * EXP(-xc(1:nx)**2) 
-          local_flux = SUM(dxb(1:nx) * EXP(-xc(1:nx)**2))
+          phi(1:nx,0) = phi(1:nx,1) + dyc(1) * EXP(-((xc(1:nx) - 30.0_num) / 5.0_num)**2) 
+          phi(1:nx,0) = phi(1:nx,0) - dyc(1) * EXP(-((xc(1:nx) + 30.0_num) / 5.0_num)**2)
+          local_flux = SUM(dxb(1:nx) * (EXP(-((xc(1:nx) - 30.0_num) / 5.0_num)**2) &
+              - EXP(-((xc(1:nx) + 30.0_num) / 5.0_num)**2)))
           phi(1:nx,-1) = phi(1:nx,0)
+         
         END IF
         CALL MPI_ALLREDUCE(local_flux, total_flux, 1, mpireal, MPI_SUM, comm, errcode)
         IF (proc_y_min == MPI_PROC_NULL) THEN
@@ -378,8 +420,8 @@ CONTAINS
         END IF        
 
         IF (proc_y_max == MPI_PROC_NULL) THEN
-          phi(:,ny+1) = 0.0_num
-          phi(:,ny+2) = 0.0_num
+          phi(:,ny+1) = 1.0_num
+          phi(:,ny+2) = 1.0_num
         END IF        
         IF (proc_x_min == MPI_PROC_NULL) THEN
           phi(0,:) = phi(1,:) 

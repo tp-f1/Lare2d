@@ -146,6 +146,7 @@ CONTAINS
     REAL(num) :: T, rho0, e0, dx, x, fa, xi_a
     REAL(num), DIMENSION(2) :: ta
     INTEGER :: loop
+
     DO iy = -1, ny + 2
       DO ix = -1, nx + 2
         rho0 = rho(ix,iy)
@@ -155,7 +156,6 @@ CONTAINS
 
         IF (ta(1) > ta(2)) THEN
           PRINT*, 'Temperature bounds problem', ta
-          PRINT*, iy
           STOP
         END IF
 
@@ -169,7 +169,7 @@ CONTAINS
           fa = x - (gamma - 1.0_num) &
               * (e0 - (1.0_num - xi_a) * ionise_pot) / (2.0_num - xi_a)
           IF (fa <= 0.0_num) t = x
-          IF (ABS(dx) < 1.e-16_num .OR. ABS(fa) < 1.e-16_num) EXIT
+          IF (ABS(dx) < 1.e-8_num .OR. ABS(fa) < 1.e-8_num) EXIT
         END DO
 
         xi_n(ix,iy) = get_neutral(x, rho0)

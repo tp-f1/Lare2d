@@ -51,13 +51,13 @@ CONTAINS
     ! non-ideal MHD terms.
 
     ! Magnetic field normalisation in Tesla
-    B_norm = 0.03_num
+    B_norm = 0.001_num
 
     ! Length normalisation in m
-    L_norm = 180.e3_num
+    L_norm = 170.e6_num
 
     ! Density normalisation in kg / m^3
-    rho_norm = 1.67e-4_num
+    rho_norm = 1.00357e-6_num
 
   END SUBROUTINE user_normalisation
 
@@ -70,19 +70,19 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 5 
-    ny_global = 500 
+    nx_global = 20
+    ny_global = 20 
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
     nsteps = -1 
-
+    
     ! The maximum runtime of the code
-    t_end = 50.0_num
+    t_end = 0.01_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
-    visc1 = 0.1_num
-    visc2 = 1.0_num
+    visc1 = 0.2_num
+    visc2 = 0.0_num
     ! \nabla^2 v damping 
     ! visc3 is an array set initial conditions
     use_viscous_damping = .FALSE.
@@ -90,18 +90,18 @@ CONTAINS
     ! Set these constants to manually override the domain decomposition.
     ! If either constant is set to zero then the code will try to automatically
     ! decompose in this direction
-    nprocx = 0
+    nprocx = 1
     nprocy = 0
 
     ! The length of the domain in the x direction
-    x_min = -20.0_num
-    x_max = 20.0_num
+    x_min = 0.0_num
+    x_max = 0.5_num
     ! Should the x grid be stretched or uniform
     x_stretch = .FALSE.
 
     ! The length of the domain in the y direction
-    y_min = -10.0_num
-    y_max = 80.0_num
+    y_min = 0.0_num
+    y_max = 1.0_num
     ! Should the y grid be stretched or uniform
     y_stretch = .FALSE.
 
@@ -128,24 +128,34 @@ CONTAINS
     ! large thermal conductivity. For many problems it is however
     ! fine.
     conduction = .TRUE.
+    ! Method for solving conduction equation
+    ! SUPER - superstepping and IMPLIC - implicit scheme
+    conduct_method = SUPER  
     ! Apply a flux limiter to stop heat flows exceeding free streaming limit
     heat_flux_limiter = .FALSE.
     ! Fraction of free streaming heat flux used if limiter on
-    flux_limiter = 0.06_num
+    flux_limiter = 0.12_num
+    ! Use the TRAC method to broaden the transition region
+    trac_method = .FALSE.
 
     ! Use radiation as specified in SUBROUTINE rad_losses
     ! in src/radiative.f90
-    radiation = .TRUE.
+    radiation = .FALSE.
 
     ! Include user specified heating function as specified in 
     ! SUBROUTINE rad_losses user_defined_heating in src/radiative.f90
-    coronal_heating = .TRUE.
+    coronal_heating = .FALSE.
+
+    ! Have a localised energy release in the corona
+    ! modelling heating from a solar flare
+    flare_event = .FALSE. 
+
 
     ! Remap kinetic energy correction. LARE does not perfectly conserve kinetic
     ! energy during the remap step. This missing energy can be added back into
     ! the simulation as a uniform heating. Setting rke to true turns on this
     ! addition.
-    rke = .TRUE.
+    rke = .FALSE.
 
     ! The code to choose the initial conditions. The valid choices are
     ! IC_NEW     - Use set_initial_conditions in "initial_conditions.f90" to
@@ -153,11 +163,12 @@ CONTAINS
     ! IC_RESTART - Load the output file with index restart_snapshot and use it
     !              as the initial conditions
     initial = IC_NEW
-    restart_snapshot = 1
+    restart_snapshot = 100 
 
+    ! If cowling_resistivity is true then the code calculates and
     ! applies the Cowling Resistivity to the MHD equations
     ! only possible if not EOS_IDEAL
-    ! resistive_mhd must be TRUE for this to actually be applied
+    ! resistive_mhd must be TRUE for this to actaully be applied
     cowling_resistivity = .FALSE.
 
     ! Set the boundary conditions on the four edges of the simulation domain
@@ -185,14 +196,14 @@ CONTAINS
     ! EOS_PI    - Simple ideal gas for partially ionised plasma
     ! EOS_ION   - EOS_PI plus the ionisation potential
     ! N.B. read the manual for notes on these choices
-    eos_number = EOS_ION
+    eos_number = EOS_IDEAL
     ! EOS_IDEAL also requires that you specific whether
     ! the gas is ionised or not. Some stratified atmospheres
     ! only work for neutral hydrogen even though using MHD
     ! For fully ionised gas set .FALSE.
     ! For neutral hydrogen set .TRUE.
     ! This flag is ignored for all other EOS choices.
-    neutral_gas = .TRUE.
+    neutral_gas = .FALSE.
 
     !An exponential moving average 
     !(https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average)
@@ -216,9 +227,10 @@ CONTAINS
     data_dir = 'Data'
 
     ! The interval between output snapshots.
-    dt_snapshots = t_end / 21.0_num
+    dt_snapshots = t_end / 100.0_num
 
-    ! Force dt to adjust to output exactly at times set by dt_snapshots
+
+    ! Force dt to adjust to output exactly at times set by dt_snapshot
     force_exact_time_outputs = .TRUE.
 
     ! dump_mask is an array which specifies which quantities the code should

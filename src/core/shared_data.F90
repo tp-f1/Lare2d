@@ -64,7 +64,10 @@ MODULE constants
   REAL(num), PARAMETER :: third = 1.0_num / 3.0_num, sixth = 1.0_num / 6.0_num
   INTEGER, PARAMETER :: BC_PERIODIC = 1, BC_USER = 2
   INTEGER, PARAMETER :: BC_OPEN = 3
-
+  
+  ! Conduction codes
+  INTEGER, PARAMETER :: SUPER = 1, IMPLIC = 2
+  
   ! IC codes
   ! This is a bitmask, remember that
   INTEGER, PARAMETER :: IC_NEW = 1, IC_RESTART = 2
@@ -97,7 +100,7 @@ MODULE shared_data
 
   ! NB: as there are now 2 ghost cells, indexing will fail if (nx,ny) < 2
   INTEGER :: nx, ny
-  INTEGER :: nsteps, step
+  INTEGER :: nsteps, step, tstep
 
   REAL(num), DIMENSION(:,:), ALLOCATABLE :: rho, energy, temperature
   REAL(num), DIMENSION(:,:), ALLOCATABLE :: bx, vx, vx1
@@ -159,11 +162,14 @@ MODULE shared_data
 
   ! Heat conduction
   LOGICAL :: conduction, radiation, coronal_heating
+  LOGICAL :: flare_event, trac_method
   REAL(num) :: kappa_0, flux_limiter, kappa0_SI
+  REAL(num), DIMENSION(:), ALLOCATABLE :: tr_factor_b, tr_factor_c 
+  INTEGER :: conduct_method = SUPER
 
   ! Equation of state
   INTEGER :: eos_number = EOS_IDEAL
-
+    
   ! Include exponentially moving average cooling term
   LOGICAL :: cooling_term
   REAL(num) :: alpha_av

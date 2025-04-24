@@ -78,7 +78,6 @@ CONTAINS
     ALLOCATE(curlb (0:nx,0:ny))
     ALLOCATE(energy0(-1:nx+2,-1:ny+2))
     ALLOCATE(delta_energy(-1:nx+2,-1:ny+2))
-
     DO iy = -1, ny + 2
       iym = iy - 1
       DO ix = -1, nx + 2
@@ -104,10 +103,13 @@ CONTAINS
         cv_v(ix,iy) = 0.25_num * cv_v(ix,iy)
       END DO
     END DO
+    
+    CALL trac_temperature(energy)
 
     IF (coronal_heating) CALL user_defined_heating
 
     IF (use_viscous_damping) CALL viscous_damping
+    
     CALL edge_shock_viscosity
     CALL set_dt
     dt2 = dt * 0.5_num
@@ -156,12 +158,16 @@ CONTAINS
       delta_energy(:,:) = energy(:,:) - energy0(:,:)
       energy(:,:) = energy0(:,:)
     END IF
+    
     IF (radiation) THEN
       CALL rad_losses
-      delta_energy(:,:) = delta_energy(:,:) + (energy(:,:) - energy0(:,:))
+      DO iy = 0, ny
+         delta_energy(:, iy) = delta_energy(:, iy) &
+             + (energy(:, iy) - energy0(:, iy)) / tr_factor_c(iy)  
+      END DO
       energy(:,:) = energy0(:,:)
     END IF
-    energy(:,:) = energy0(:,:) + delta_energy(:,:)
+    energy(:,:) = energy0(:,:) + delta_energy(:,:) 
     energy(:,:) = MAX(energy(:,:), 0.0_num)
 
     CALL predictor_corrector_step
@@ -912,19 +918,19 @@ CONTAINS
 
     END IF
 
-    IF (conduction) THEN
-      CALL calc_s_stages(.TRUE.)
-      IF (n_s_stages >= ss_limit) THEN
-        ss_reduct_fac = REAL(2 * ss_limit**2   - 9, num) &
-                      / REAL(2 * n_s_stages**2 - 9, num)
-        dt  = dt  * ss_reduct_fac
-        dtr = dtr * ss_reduct_fac
-        IF (hall_mhd) THEN
-          dth = dth * ss_reduct_fac
-        END IF
-      END IF
-    END IF
-
+    !IF (conduction) THEN
+    !  CALL calc_s_stages(.TRUE.)
+    !  IF (n_s_stages >= ss_limit) THEN
+    !    ss_reduct_fac = REAL(2 * ss_limit**2   - 9, num) &
+    !                  / REAL(2 * n_s_stages**2 - 9, num)
+    !    dt  = dt  * ss_reduct_fac
+    !    dtr = dtr * ss_reduct_fac
+    !    IF (hall_mhd) THEN
+    !      dth = dth * ss_reduct_fac
+    !    END IF
+    !  END IF
+    !END IF
+    
     time = time + dt
 
   END SUBROUTINE set_dt

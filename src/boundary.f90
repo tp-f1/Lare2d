@@ -218,13 +218,11 @@ CONTAINS
     END IF
 
     IF (proc_y_min == MPI_PROC_NULL .AND. ybc_min == BC_USER) THEN
-      energy(:, 0) = energy(:,1)
-      energy(:,-1) = energy(:,2)
+      energy(:, -1:1) = 1.0_num
     END IF
 
     IF (proc_y_max == MPI_PROC_NULL .AND. ybc_max == BC_USER) THEN
-      energy(:,ny+1) = energy(:,ny  )
-      energy(:,ny+2) = energy(:,ny-1)
+      energy(:, ny:ny+2) = 1.0_num
     END IF
 
   END SUBROUTINE energy_bcs

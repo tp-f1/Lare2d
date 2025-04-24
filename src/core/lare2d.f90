@@ -34,6 +34,7 @@ PROGRAM lare2d
   IMPLICIT NONE
 
   step = 0
+  tstep = 0 
 
   CALL mpi_minimal_init    ! mpi_routines.f90
 

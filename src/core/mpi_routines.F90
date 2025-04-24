@@ -272,6 +272,8 @@ CONTAINS
     IF (rke) ALLOCATE(delta_ke(-1:nx+2, -1:ny+2))
     IF (hall_mhd) ALLOCATE(lambda_i(0:nx, 0:ny))
     ALLOCATE(gamma_boris(-1:nx+2, -1:ny+2))
+    ALLOCATE(tr_factor_b(-1:ny+1))
+    ALLOCATE(tr_factor_c(-1:ny+1))
 
     IF (cooling_term) THEN
       ALLOCATE(cool_term_v(nx,ny))
@@ -358,8 +360,10 @@ CONTAINS
     IF (ALLOCATED(cool_term_b)) DEALLOCATE(cool_term_b)
     IF (ALLOCATED(cool_term_v)) DEALLOCATE(cool_term_v)
     DEALLOCATE(gamma_boris)
-
-  END SUBROUTINE mpi_close
+    DEALLOCATE(tr_factor_b)
+    DEALLOCATE(tr_factor_c)
+ 
+END SUBROUTINE mpi_close
 
 
 

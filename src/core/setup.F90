@@ -246,31 +246,28 @@ CONTAINS
   SUBROUTINE stretch_y
 
     REAL(num) :: width, dy, L, f, ly_new
-    REAL(num), DIMENSION(:), ALLOCATABLE :: dynew
+    REAL(num), DIMENSION(:), ALLOCATABLE :: dynew, y_new
 
-    ALLOCATE(dynew(-2:ny_global+2))
+    ALLOCATE(y_new(-2:ny_global+2))
 
     ! New total length
-    ly_new = 100.0_num
+    ly_new = 1.0_num
 
     ! Centre of tanh stretching in unstretched coordinates
-    L = length_y / 1.5_num
+    L = length_y / 2.0_num
 
-    ! Width of tanh stretching in unstretched coordinates
-    width = length_y / 10.0_num
-
-    f = (ly_new - length_y) / (length_y - L) / 2.0_num
+    f = 0.5_num
 
     dy = length_y / REAL(ny_global, num)
-    dynew(:) = dy + f * (1.0_num + TANH((ABS(yb_global(:)) - L) / width)) * dy
-
-    DO iy = 1, ny_global + 2
-      yb_global(iy) = yb_global(iy-1) + dynew(iy)
-    END DO
+    width = 1 / 4.0_num
+    y_new(:) =  ly_new * f * (1.0_num + TANH((yb_global(:) - L) / width)/TANH(0.5_num / width))
 
     length_y = ly_new
 
-    DEALLOCATE(dynew)
+    yb_global(1:ny_global+2) = y_new(1:ny_global+2) 
+    
+
+    DEALLOCATE(y_new)
 
   END SUBROUTINE stretch_y
 

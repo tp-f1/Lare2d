@@ -35,12 +35,14 @@ CONTAINS
   !****************************************************************************
 
   SUBROUTINE conduct_heat
-
-    ALLOCATE(larsen_factor(0:nx,0:ny))
-    CALL calc_s_stages(.FALSE.)
-    CALL heat_conduct_sts2
-    DEALLOCATE(larsen_factor)
-
+    IF (conduct_method == SUPER) THEN
+        ALLOCATE(larsen_factor(0:nx,0:ny))
+        CALL calc_s_stages(.FALSE.)
+        CALL heat_conduct_sts2
+        DEALLOCATE(larsen_factor)
+    ELSE IF (conduct_method == IMPLIC) THEN
+        CALL implicit_conduct
+    END IF
   END SUBROUTINE conduct_heat
 
 
@@ -53,7 +55,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: lagrangian_call
     REAL(num) :: stages, dt_parab, dt1, dt2
     REAL(num) :: q_fs, q_fs2, q_spx, q_spy, q_sp2
-    REAL(num) :: temp, kappa1, gm1
+    REAL(num) :: tb, rho_b, temp, kappa1, gm1
     INTEGER :: n_s_stages_local
 
     ! Make sure arrays are allocated if calling this routine just to determine
@@ -65,10 +67,10 @@ CONTAINS
       DO ix=-1,nx+2
         temperature(ix,iy) = gm1 / (2.0_num - xi_n(ix,iy)) &
             * (energy(ix,iy) - (1.0_num - xi_n(ix,iy)) * ionise_pot)
-      ENDDO
-    ENDDO
+      END DO
+    END DO
 
-    ! Include flux limiting through a larson factor correction to the
+    ! Include flux limiting through a larsen factor correction to the
     ! conductivity
       DO iy = 0, ny
         iym = iy - 1
@@ -76,23 +78,26 @@ CONTAINS
         DO ix = 0, nx
           ixm = ix - 1
           ixp = ix + 1
-          temp = temperature(ix,iy)**pow
-          q_fs = flux_limiter * 42.85_num * rho(ix,iy) &  ! 42.85 = SQRT(m_i/m_e)
-              * temperature(ix,iy)**1.5_num
+          tb = 0.25_num * (temperature(ix,iy) + temperature(ix,iyp) &
+             + temperature(ixp, iy) + temperature(ixp, iyp))
+          rho_b = 0.25_num * (rho(ix,iy) + rho(ix,iyp) + rho(ixp,iy) + rho(ixp,iyp)) 
+          temp = tb**pow
+          q_fs = flux_limiter * 42.85_num * rho_b &  ! 42.85 = SQRT(m_i/m_e)
+              * tb**1.5_num
           q_fs2 = q_fs**2
           q_spx = - kappa_0 * temp &
-              * (temperature(ixp,iy) - temperature(ixm,iy)) &
-              * 0.5_num / dxb(ix)
+              * (temperature(ixp,iy) - temperature(ix,iy)) &
+               / dxc(ix)
           q_spy = - kappa_0 * temp &
-              * (temperature(ix,iyp) - temperature(ix,iym)) &
-              * 0.5_num / dyb(iy)
+              * (temperature(ix,iyp) - temperature(ix,iy)) &
+              / dyc(iy)
           q_sp2 = q_spx**2 + q_spy**2
           larsen_factor(ix,iy) = q_fs / SQRT(q_fs2 + q_sp2)
         END DO
       END DO
 
     IF (.NOT. heat_flux_limiter) larsen_factor = 1.0_num
-
+    
     dt_parab = 1.e10_num
 
     DO iy = 1, ny
@@ -123,15 +128,14 @@ CONTAINS
     IF (lagrangian_call) DEALLOCATE(larsen_factor)
 
   END SUBROUTINE calc_s_stages
-
-
-
+  
+  
   !****************************************************************************
   ! Subroutine to calculate the heat flux
   !****************************************************************************
 
   SUBROUTINE heat_flux(temperature, flux)
-
+    
     REAL(num), INTENT(IN), DIMENSION(-1:,-1:) :: temperature
     REAL(num), INTENT(OUT), DIMENSION(-1:,-1:) :: flux
     INTEGER :: ix, ixp, ixm
@@ -139,15 +143,16 @@ CONTAINS
     REAL(num) :: tg_a, tb_p, tb_m
     REAL(num) :: modb
     REAL(num) :: byf, bxf, bzf
-
-    flux=0.0_num
+    
+    
+    flux = 0.0_num
     DO iy = 0, ny
       iyp = iy + 1
       iym = iy - 1
       DO ix = 0, nx
         ixp = ix + 1
         ixm = ix - 1
-
+        
         ! X flux
         byf = 0.25_num * (by(ix,iy) + by(ix,iym) + by(ixp,iy) + by(ixp,iym))
         bzf = 0.5_num * (bz(ix,iy) + bz(ixp,iy))
@@ -157,7 +162,7 @@ CONTAINS
         ! Braginskii Conductive Flux
         ! Temperature at the x boundaries in the current cell
         tb = 0.5_num * (temperature(ix,iy) + temperature(ixp,iy))
-
+        
         ! Temperature at the x boundaries in the cell above
         tb_p = 0.5_num * (temperature(ix,iyp) + temperature(ixp,iyp))
         ! Temperature at the x boundaries in the cell below
@@ -167,8 +172,9 @@ CONTAINS
         ! Y temperature gradient at the x boundaries of the current cell
         ! Uses centred difference on averaged values, so likely very smoothed
         tg_a = (tb_p - tb_m) / (dyc(iy) + dyc(iym))
+        
 
-        fc_sp = - larsen_factor(ix,iy) * kappa_0 * tb**pow / modb &
+        fc_sp = - tr_factor_b(iy) * larsen_factor(ix,iy) * kappa_0 * tb**pow / modb &
             * (bx(ix ,iy) * (tg * bx(ix ,iy) + tg_a * byf) + tg * min_b)
 
         flux(ix,iy) = flux(ix,iy) - fc_sp / dxb(ix)
@@ -192,9 +198,9 @@ CONTAINS
         ! Uses centred difference on averaged values, so likely very smoothed
         tg_a = (tb_p - tb_m) / (dxc(ix) + dxc(ixm))
 
-        fc_sp = - larsen_factor(ix,iy) * kappa_0 * tb**pow / modb &
+        fc_sp = - tr_factor_b(iy) * larsen_factor(ix,iy) * kappa_0 * tb**pow / modb &
             * (by(ix,iy ) * (tg * by(ix,iy ) + tg_a * bxf) + min_b * tg)
-
+        
         flux(ix,iy) = flux(ix,iy) - fc_sp / dyb(iy)
         flux(ix,iyp) = flux(ix,iyp) + fc_sp / dyb(iy)
       END DO
@@ -282,7 +288,7 @@ CONTAINS
     DO j = 2, n_s_stages
       temperature(:,:) = (gamma-1.0_num) / (2.0_num - xi_n(:,:)) &
          * (Y(2,:,:)-(1.0_num - xi_n(:,:)) * ionise_pot)
-		  
+ 
       CALL temperature_bcs
       CALL heat_flux(temperature, flux)
 
@@ -320,6 +326,95 @@ CONTAINS
 
   END SUBROUTINE heat_conduct_sts2
 
+  SUBROUTINE implicit_conduct
+  
+      INTEGER :: i, j, k
+      REAL(num) :: alpha, losses
+      REAL(num), DIMENSION(:,:), ALLOCATABLE :: matrix
+      REAL(num), DIMENSION(:), ALLOCATABLE :: b, t_boundary, chi, powers
+
+      ALLOCATE(matrix(1:3, 1:ny))
+      ALLOCATE(b(1:ny))
+      ALLOCATE(t_boundary(1:7), chi(1:6), powers(1:6))
+      
+      temperature(:,:) = (gamma-1.0_num) / (2.0_num - xi_n(:,:)) &
+         * (energy(:,:)-(1.0_num - xi_n(:,:)) * ionise_pot)
+      
+      ! Setup radiative losses
+      t_boundary = (/0.02_num, 0.0398_num, 0.0794_num, 0.251_num, 0.562_num, 1.995_num, 10.0_num/) * 1.e6_num / temp_norm
+      chi = (/-21.85_num, -31.0_num, -21.2_num, -10.4_num, -21.94_num, -17.73_num/)
+      chi = 10**chi
+      powers = (/0.0_num, 2.0_num, 0.0_num, -2.0_num, 0.0_num, -2.0_num/3.0_num/)
+       
+      k = 6
+      DO j = 2, ny-1
+        DO i = 1, 6
+            IF (temperature(1,j) > t_boundary(i) .AND. temperature(1,j) <= t_boundary(i+1)) THEN
+                k = i
+                EXIT
+            END IF
+        END DO
+        
+        IF (radiation) THEN
+            losses = rho(1,j)**2 * chi(k) * temperature(1,j)**(powers(k) - 1)
+        ELSE 
+            losses = 0.0_num
+        END IF
+
+        ! Calculate tridiagonal matrix for implicit conduction
+        ! and write temperature into b matrix
+        alpha = rho(1,j) * (2 - xi_n(1,j)) / ((gamma - 1.0_num) * dt)
+        
+        matrix(1,j) = 0.625_num / (0.5*(dyc(j) + dyc(j+1))) &
+            * (temperature(1,j+1) - temperature(1,j-1)) * temperature(1,j)**1.5_num &
+            - temperature(1,j)**2.5_num / (0.5*(dyc(j) + dyc(j+1)))**2
+
+        matrix(2,j) = alpha + 2 * temperature(1,j)**2.5_num / (0.5*(dyc(j) + dyc(j+1)))**2 + losses
+
+        matrix(3,j) = -0.625_num / (0.5*(dyc(j) + dyc(j+1))) &
+            * (temperature(1,j+1) - temperature(1,j-1)) * temperature(1,j)**1.5_num &
+            - temperature(1,j)**2.5_num / (0.5*(dyc(j) + dyc(j+1)))**2
+
+        matrix(:,j) = matrix(:,j) / alpha
+
+        b(j) = temperature(1,j)
+     
+     END DO
+     
+     ! Set boundary values
+     matrix(2,1) = 1.0_num
+     matrix(2,ny) = 1.0_num
+     matrix(3,1) = 0.0_num
+     b(1) = temperature(1,1)
+
+     ! Implement Thomas algorithm to write matrix in upper triangular form
+     ! and transform values 
+     DO j = 2, ny
+        matrix(1,j) = matrix(1,j) / matrix(2,j-1)
+ 
+        matrix(2,j) = matrix(2,j) - matrix(1,j) * matrix(3,j-1)
+        
+        b(j) = temperature(1,j) - matrix(1,j) * b(j-1)
+     END DO
+
+     ! Calculate new temperature 
+     b(ny) = b(ny) / matrix(2,ny)
+     DO j = ny-1, 1, -1
+        b(j) = (b(j) - matrix(3,j) * b(j+1)) / matrix(2,j)
+     END DO
+      
+     DO j = 1, ny
+        energy(:,j) = b(j) * (2.0_num - xi_n(:,j)) / (gamma - 1.0_num) &
+            + (1.0_num - xi_n(:,j)) * ionise_pot 
+     END DO
+
+     CALL energy_bcs
+
+     DEALLOCATE(matrix)
+     DEALLOCATE(b)
+     DEALLOCATE(t_boundary, chi, powers)
+
+END SUBROUTINE implicit_conduct
 
 
 END MODULE conduct
