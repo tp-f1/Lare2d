@@ -45,199 +45,154 @@ CONTAINS
   ! If using Hall_MHD then you must specific lambda_i in this routine
   !****************************************************************************
 
-
   SUBROUTINE set_initial_conditions
 
-    REAL(num) :: w_tr = 0.6_num, T_ph = 9.31_num, T_cor = 2000.0_num
-    REAL(num) :: y_ph = 0.0_num, y_cor = 11.0_num, w = 0.01
-    REAL(num) :: xi_v, error, mu_old
-    REAL(num) :: multiplier, lower, upper, dg
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: temperature
+    REAL(num) :: xi_v, amp, centre, width
+
+    INTEGER :: loop
+    INTEGER :: ix, iy, iy1
+    REAL(num) :: a1, a2, dg, a, b, c
+    REAL(num) :: legs_size, wtr, ycor, gravity_value, Tph, Tcor 
+    
+    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dyb_global, dyc_global
+    REAL(num), DIMENSION(:), ALLOCATABLE :: grav_ref, temp_ref, rho_ref
+    REAL(num), DIMENSION(:), ALLOCATABLE :: beta_ref, mag_ref, mu_m
+
+    ALLOCATE(yc_global(-1:ny_global+1))
+    ALLOCATE(dyb_global(-1:ny_global+1))
+    ALLOCATE(dyc_global(-1:ny_global+1))
+    ALLOCATE(grav_ref(-1:ny_global+2))
+    ALLOCATE(temp_ref(-1:ny_global+2))
+    ALLOCATE(rho_ref(-1:ny_global+2))
+    ALLOCATE(mag_ref(-1:ny_global+2))
+    ALLOCATE(beta_ref(-1:ny_global+2))
+    ALLOCATE( mu_m(-1:ny_global+2))
 
 
-    integer :: i, jm, j, iter 
-    
-    REAL(num), DIMENSION(:), ALLOCATABLE :: yc_global, dy_b, dy_c 
-    REAL(num), DIMENSION(:), ALLOCATABLE :: rho_y, temp_y
-    REAL(num), DIMENSION(:), ALLOCATABLE :: mu   
+    legs_size = 10.0e6_num / L_norm
+    wtr = 1.e6_num / L_norm
+    gravity_value = 274.0_num / (L_norm / time_norm**2)
+    Tph = 2.e4_num / (mf * mh_si * L_norm**2 / time_norm**2 / kb_si)
+    Tcor = 2.2e6_num / (mf * mh_si * L_norm**2 / time_norm**2 / kb_si)
 
-    ALLOCATE(yc_global(-1:ny+1))
-    ALLOCATE(dy_b(-1:ny+1))
-    ALLOCATE(dy_c(-1:ny+1))
-    ALLOCATE(rho_y(-1:ny+2))
-    ALLOCATE(temp_y(-1:ny+2))
-    ALLOCATE(mu(-1:ny+2))
-    
-    ! Calculate y-coordinate of the centres 
-    DO j = -1, ny + 1
-        yc_global(j) = 0.5_num * (yb_global(j-1) + yb_global(j))
-    END DO 
-    
-    ! Calculate grid spacings
-    DO j = -1, ny 
-        dy_c(j) = yc_global(j+1) - yc_global(j)
-        dy_b(j) = yb_global(j) - yb_global(j-1)
+    ! Below are all the variables which must be defined and their sizes
+
+    vx = 0.0_num
+    vy = 0.0_num
+    vz = 0.0_num
+    bx = 0.0_num
+    by = 0.0_num
+    bz = 0.0_num
+
+    ! Fill in yc_global with the positions central to the yb_global points
+    DO iy = -1, ny_global + 1
+      yc_global(iy) = 0.5_num * (yb_global(iy-1) + yb_global(iy))
     END DO
 
-    ! Initialise velocity and magnetic field  
-    vx(:, :) = 0.0_num
-    vy(:, :) = 0.0_num
-    vz(:, :) = 0.0_num
-
-    bx(:, :) = 0.0_num
-    DO i = -1, nx+2
-        by(i, :) = -tanh(xb_global(i) / w)
-        bz(i, :) = 1.0_num / cosh(xb_global(i) / w)
+    ! Fill in dyb_global and dyc_global
+    DO iy = -1, ny_global
+      dyb_global(iy) = yb_global(iy) - yb_global(iy-1)
+      dyc_global(iy) = yc_global(iy+1) - yc_global(iy)
     END DO
 
-    ! Normalise gravity to value at photosphere
-    grav(:) = 11.5_num
+    ! Fill in the reference gravity array 
+    grav_ref = gravity_value 
+    a1 = legs_size
     
-    ! Set gravity to zero smoothly below upper boundary
-    ! For boundary condition purposes
-    lower = yb_global(ny) - 20.0_num 
-    upper = yb_global(ny) - 5.0_num
-    DO j = -1, ny + 2
-        IF (yb_global(j) > y_ph) THEN
-             grav(j) = grav(j) * (3.87e3_num &
-                / ((yb_global(j) - y_ph) + 3.87e3_num))**2
+    grav_ref(-1) = grav_ref(0)
+    grav_ref(ny_global+1:ny_global+2) = grav_ref(ny_global)
+
+   ! Calculate the density profile, starting from the refence density at the
+   ! photosphere/chromosphere and calculating up
+    rho_ref = 1.0_num
+    mu_m = 1.0_num
+    IF (eos_number == EOS_IDEAL .AND. (.NOT. neutral_gas)) mu_m = 0.5_num
+
+   ! Go from photosphere/chromosphere up (along the loop)
+    a = -(Tcor - Tph) / (a1 - 0.5_num * y_max)**2
+    b = -2.0_num * a * 0.5_num * y_max
+    c = Tcor + a * (0.5_num * y_max)**2
+    DO iy = -1, ny_global + 1
+!      IF (yc_global(iy) < y_max / 2.0_num) THEN
+!        temp_ref(iy) = Tph + 0.5_num * (Tcor - Tph) * (TANH((yc_global(iy) - ycor) / wtr) + 1.0_num)
+!      ELSE
+!        temp_ref(iy) = Tph + 0.5_num * (Tcor - Tph) * (TANH((-yc_global(iy) - ycor + y_max) / wtr) + 1.0_num)
+!      END IF
+       IF (yc_global(iy) <= a1 .OR. yc_global(iy) >= a2) THEN
+            temp_ref(iy) = Tph
+       ELSE
+            temp_ref(iy) = a * yc_global(iy)**2 + b * yc_global(iy) + c
+       END IF
+    END DO
+    temp_ref(ny_global+1:ny_global+2) = temp_ref(ny_global)
+    
+    ! Now move from the photosphere/chromosphere up (along the loop)
+    DO iy = 2, ny_global
+       IF (yc_global(iy) >= 0.0_num) THEN
+         iym = iy - 1
+         dg = 1.0_num / (dyb_global(iy) + dyb_global(iym))
+
+         rho_ref(iy)  = rho_ref(iym) * (temp_ref(iym) &
+             * 1.0_num / dyc_global(iym) / mu_m(iym) &
+             - grav_ref(iym) * dyb_global(iym) * dg)
+
+         rho_ref(iy)  = rho_ref(iy) / (temp_ref(iy) &
+             * 1.0_num  / dyc_global(iym) / mu_m(iy) &
+             + grav_ref(iym) * dyb_global(iy) * dg)
+       END IF
+     END DO
+
+   rho_ref(ny_global+1:ny_global+2) = rho_ref(ny_global)
+
+  ! Fill in all the final arrays from the ref arrays
+  iy1 = n_global_min(2) - 1
+
+  DO iy = -1, ny + 2
+    grav(iy) = grav_ref(iy1)
+    DO ix = -1, nx + 2
+      rho(ix,iy) = rho_ref(iy1)
+      energy(ix,iy) = temp_ref(iy1)
+
+      IF (eos_number /= EOS_IDEAL) THEN
+        xi_v = get_neutral(energy(ix,iy), rho(ix,iy))
+      ELSE
+        IF (neutral_gas) THEN
+          xi_v = 1.0_num
+        ELSE
+          xi_v = 0.0_num
         END IF
+      END IF
 
-        IF (yb_global(j) > lower) THEN
-            grav(j) = grav(j) * 0.5_num &
-                * (1.0_num + COS(pi * (yb_global(j) - lower) / (upper - lower)))
-        END IF 
-
-        IF (yb_global(j) > upper) THEN
-           grav(j) = 0.0_num
-        END IF
+      energy(ix,iy) = (energy(ix,iy) * (2.0_num - xi_v) &
+          + (1.0_num - xi_v) * ionise_pot * (gamma - 1.0_num)) &
+          / (gamma - 1.0_num)
     END DO
-    
-    
-    ! Setting initial values
-    rho_y(:) = 1.0_num
-    mu(:) = 1.0_num
-    IF (eos_number == EOS_IDEAL .AND. (.NOT. neutral_gas)) THEN
-        mu(:) = 0.5_num
-    END IF
+    iy1 = iy1 + 1
+  END DO
 
-    ! Calculate temperature and density given previous ionisation
-    ! Then recalculate ionisation and see if the value is stable
-
-    DO iter = 1, 1000
-        error =  0.0_num
-        
-        ! Set temperature profiles 
-        DO j = -1, ny 
-            ! Below photosphere
-            IF (yc_global(j) < y_ph) THEN
-                temp_y(j) = T_ph - (gamma - 1.0_num) * (yc_global(j) - y_ph) &
-                 * grav(j) * mu(j) / gamma 
-            END IF
-           
-            ! From photosphere to corona
-            IF (yc_global(j) >= y_ph) THEN
-                multiplier = 0.5_num * (TANH((yc_global(j) - y_cor) / w_tr) + 1.0_num)
-                temp_y(j) = T_ph + (T_cor - T_ph) * multiplier
-            END IF
-        END DO
-       
-        temp_y(ny+1:ny+2) = temp_y(ny)
-        
-        ! Calculate density profiles using hydrostatic equilibrium
-        ! Going down from photosphere
-        DO j = ny, 0, -1
-            IF (yc_global(j) < y_ph) THEN
-                jm = j - 1
-                dg = 1.0_num / (dy_b(j) + dy_b(jm))
-                multiplier = (temp_y(j) / mu(j)   / dy_c(jm) + grav(jm) * dy_b(j) * dg) &
-                    / (temp_y(jm) / mu(jm)  / dy_c(jm) - grav(jm) * dy_b(jm) * dg)
-                rho_y(jm) = rho_y(j) * multiplier 
-            END IF
-        END DO
-
-        !  Going up from photosphere  
-        DO j = 0, ny
-            IF (yc_global(j) >= y_ph) THEN
-                jm = j - 1
-                dg = 1.0_num / (dy_b(j) + dy_b(jm))
-                multiplier = (temp_y(jm) / mu(jm) / dy_c(jm) - grav(jm) * dy_b(jm) * dg) &
-                / (temp_y(j) / mu(j)  / dy_c(jm) + grav(jm) * dy_b(j) * dg)
-                rho_y(j) = rho_y(jm) * multiplier
-            END IF
-        END DO
-                 
-        ! Calculate largest difference between new ionisation 
-        ! and ionisation from previous iteration
-        IF (eos_number /= EOS_IDEAL) THEN
-            DO j = 0, ny
-                xi_v = get_neutral(temp_y(j), rho_y(j))
-                mu_old = mu(j)
-                mu(j) = 1.0_num / (2.0_num - xi_v)
-                error = MAX(error, ABS(mu(j) - mu_old))
-            END DO
-        END IF
-        
-        ! Exit if stable value found
-        IF (error < 1.0e-18_num) EXIT
-
-    END DO            
-    
-    rho_y(-1) = rho_y(0)
-    rho_y(ny + 1: ny + 2) = rho_y(ny)
-    
-    ! Set full initial conditions from calculated profiles
-    print*, n_global_min(2)
-    DO j = -1, ny + 2
-        DO i = -1, nx + 2
-            rho(i, j) = rho_y(j)
-            IF (eos_number /= EOS_IDEAL) THEN
-                xi_v = get_neutral(temp_y(j), rho_y(j))
-            ELSE 
-                IF (neutral_gas) THEN
-                    xi_v = 1.0_num
-                ELSE 
-                    xi_v = 0.0_num
-                END IF
-            END IF
-            energy(i, j) = temp_y(j) * (2.0_num - xi_v) / (gamma - 1.0_num) &
-                + (1.0_num - xi_v) * ionise_pot
-        END DO
-        IF (j==35) THEN
-            print*, ionise_pot, xi_v, rho(nx, j)
-        END IF
-    END DO
-
-
-    DO i = - 1, nx + 2
-        energy(i, ny+2) = energy(i, ny+1)
-    END DO
-   
-    
-    ! Analytic potential field
-!    CALL potential_field_analytic()
-    
-    ! Field generated from dipolar footpoints
-    !CALL potential_field()
-
-    ! Set up simple energy pulse
-!    DO j = 1, ny
-!        energy(:,j) = 1.0_num & 
-!            + EXP(-(j-ny/2.0_num)**2 / 4.0_num)
-!        rho(:,j) = 1.0_num 
+  DO ix = -1, nx + 2
+        energy(ix, ny+2) = energy(ix, ny+1) 
+  END DO
+  
+  
+!  DO iy = -1, ny + 2
+!    DO ix = -1, nx + 2
+!        energy(ix, iy) = energy(ix, iy) &
+!             * (1 + 10 * EXP(-((yc_global(iy) - 0.5_num) / 0.005_num) **2))
 !    END DO
+!  END DO
 
-    ! If probe points needed add them here
-    CALL add_probe(0.0_num, 0.0_num)
 
-    DEALLOCATE(yc_global)
-    DEALLOCATE(dy_b)
-    DEALLOCATE(dy_c)
-    DEALLOCATE(rho_y)
-    DEALLOCATE(temp_y)
-    DEALLOCATE(mu)
 
+  DEALLOCATE(yc_global, dyb_global, dyc_global, mu_m)
+  DEALLOCATE(grav_ref, temp_ref, rho_ref, beta_ref, mag_ref)
+
+  ! CALL add_probe(0.0_num, 0.0_num)
 
   END SUBROUTINE set_initial_conditions
+
+
 
    !  Alfven wave excitation
   ! do n1 = -1, nx+2
@@ -306,6 +261,8 @@ CONTAINS
         DEALLOCATE(phi)
 
     END SUBROUTINE potential_field_analytic
+
+
 
   SUBROUTINE potential_field()
 

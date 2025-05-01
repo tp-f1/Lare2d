@@ -70,8 +70,8 @@ CONTAINS
   SUBROUTINE control_variables
 
     ! Set the number of gridpoints in x and y directions
-    nx_global = 20
-    ny_global = 20 
+    nx_global = 10
+    ny_global = 1000 
 
     ! Set the maximum number of iterations of the core solver before the code
     ! terminates. If nsteps < 0 then the code will run until t = t_end
@@ -81,7 +81,7 @@ CONTAINS
     t_end = 0.01_num
 
     ! Shock viscosities as detailed in manual - they are dimensionless
-    visc1 = 0.2_num
+    visc1 = 0.0_num
     visc2 = 0.0_num
     ! \nabla^2 v damping 
     ! visc3 is an array set initial conditions
@@ -94,7 +94,7 @@ CONTAINS
     nprocy = 0
 
     ! The length of the domain in the x direction
-    x_min = 0.0_num
+    x_min = -0.5_num
     x_max = 0.5_num
     ! Should the x grid be stretched or uniform
     x_stretch = .FALSE.
@@ -127,7 +127,7 @@ CONTAINS
     ! with steep temperature gradients and very hot regions with
     ! large thermal conductivity. For many problems it is however
     ! fine.
-    conduction = .TRUE.
+    conduction = .FALSE.
     ! Method for solving conduction equation
     ! SUPER - superstepping and IMPLIC - implicit scheme
     conduct_method = SUPER  

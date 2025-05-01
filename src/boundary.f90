@@ -218,11 +218,11 @@ CONTAINS
     END IF
 
     IF (proc_y_min == MPI_PROC_NULL .AND. ybc_min == BC_USER) THEN
-      energy(:, -1:1) = 1.0_num
+      energy(:, -1:1) = 2.e4_num * 2.0_num / (gamma - 1.0_num) / temp_norm
     END IF
 
     IF (proc_y_max == MPI_PROC_NULL .AND. ybc_max == BC_USER) THEN
-      energy(:, ny:ny+2) = 1.0_num
+      energy(:, ny:ny+2) = 2.2e6_num * 2.0_num / (gamma - 1.0_num) / temp_norm
     END IF
 
   END SUBROUTINE energy_bcs
@@ -276,8 +276,7 @@ CONTAINS
     END IF
 
     IF (proc_y_min == MPI_PROC_NULL .AND. ybc_min == BC_USER) THEN
-      rho(:, 0) = rho(:,1)
-      rho(:,-1) = rho(:,2)
+      rho(:, -1:1) = 1.0_num
     END IF
 
     IF (proc_y_max == MPI_PROC_NULL .AND. ybc_max == BC_USER) THEN
